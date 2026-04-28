@@ -103,16 +103,44 @@ else:
                 
                 st.divider()
                 st.subheader("Resultado de la Cotización")
-                st.metric(label="Prima Sugerida (Base)", value=f"${prediccion:,.0f} COP")
                 
-                st.info(f"""
-                **Rango Estimado de Ajuste:** Debido a la variabilidad estadística, el valor puede oscilar entre:  
-                ### **${valor_min:,.0f}** y **${valor_max:,.0f} COP**
-                """)
+                # Métrica principal de Streamlit
+                st.metric(label="Prima Sugerida (Valor Central)", value=f"${prediccion:,.0f} COP")
                 
-                with st.expander("Ver detalles del cálculo"):
-                    st.write(f"- **Predicción Central:** ${prediccion:,.2f}")
-                    st.write(f"- **Error Medio Aplicado (MAE):** ±${MAE_VALOR:,.2f}")
+                # --- DISEÑO MEJORADO DEL RANGO (Sin asteriscos) ---
+                st.markdown(f"""
+                <div style="
+                    background-color: #f0f7ff; 
+                    padding: 24px; 
+                    border-radius: 12px; 
+                    border-left: 6px solid #007bff; 
+                    margin-top: 20px;
+                    margin-bottom: 20px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                ">
+                    <p style="margin: 0; color: #0056b3; font-weight: 600; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                        Rango Estimado de Ajuste
+                    </p>
+                    <p style="margin: 8px 0; color: #444; font-size: 0.95rem;">
+                        Debido a la variabilidad estadística, el valor puede oscilar entre:
+                    </p>
+                    <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 5px;">
+                        <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
+                            ${valor_min:,.0f}
+                        </span>
+                        <span style="font-size: 1.2rem; color: #888; font-weight: 400;">y</span>
+                        <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
+                            ${valor_max:,.0f}
+                        </span>
+                        <span style="font-size: 1.1rem; font-weight: 600; color: #444; margin-left: 5px;">COP</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                with st.expander("Ver detalles técnicos del modelo"):
+                    st.write(f"**Predicción Central:** ${prediccion:,.2f}")
+                    st.write(f"**Margen de Error (MAE):** ±${MAE_VALOR:,.2f}")
+                    st.write("**Confiabilidad:** El modelo se ajusta al perfil demográfico máximo registrado para este grupo.")
                 
                 st.balloons()
                 
