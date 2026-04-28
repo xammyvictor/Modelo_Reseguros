@@ -2,55 +2,114 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import xgboost as xgb
 
-# 1. Cargar el pipeline y las columnas
-pipeline = joblib.load('pipeline_modelo_primas.pkl')
-features_model = joblib.load('features_list.pkl')
+# Configuración de página
+st.set_page_config(page_title="Seguros - Cotizador de Primas", layout="centered")
 
-st.set_page_config(page_title="Predicción de Primas de Seguros", layout="wide")
+# --- CONSTANTES ---
+# Definimos el error MAE que obtuviste en tu modelo
+MAE_VALOR = 71322.57
 
-st.title("💰 Calculador Inteligente de Primas")
-st.markdown("Ingrese los datos demográficos del cliente para calcular el valor de la prima sugerida.")
+# --- CARGA DEL MODELO ---
+@st.cache_resource
+def load_model():
+    try:
+        # Aseguramos que el pipeline cargue correctamente
+        model = joblib.load('pipeline_modelo_primas.pkl')
+        features = joblib.load('features_list.pkl')
+        return model, features
+    except Exception as e:
+        st.error(f"Error al cargar el modelo: {e}")
+        return None, None
 
-# 2. Crear el formulario de entrada
-with st.form("datos_cliente"):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        edad = st.number_input("Edad", min_value=18, max_value=100, value=30)
-        imc = st.number_input("IMC", min_value=10.0, max_value=50.0, value=25.0)
-        genero = st.selectbox("Género", ["Masculino", "Femenino"])
-        fumador = st.selectbox("¿Es fumador?", ["Si", "No"])
+pipeline, features_model = load_model()
+
+# --- INTERFAZ ---
+st.title("🛡️ Sistema de Cotización de Primas")
+st.markdown("""
+Esta herramienta utiliza un modelo de inteligencia artificial (XGBoost) para sugerir el valor de la prima. 
+El cálculo incluye un rango de variación basado en el error medio del modelo ($MAE$).
+""")
+
+if pipeline is not None:
+    with st.form("form_cliente"):
+        st.subheader("Datos Demográficos y de Riesgo")
+        c1, c2 = st.columns(2)
         
-    with col2:
-        ciudad = st.selectbox("Ciudad", ["Cali", "Bogotá", "Medellín", "Otra"]) # Ajusta según tu top 10
-        antecedente = st.selectbox("Antecedente Familiar", ["Si", "No"])
-        siniestro = st.number_input("Valor Siniestro Pagado (COL)", min_value=0.0, value=0.0)
-    
-    submit = st.form_submit_button("Calcular Prima Sugerida")
+        with c1:
+            edad = st.number_input("Edad", 18, 100, 30)
+            imc = st.number_input("Índice de Masa Corporal (IMC)", 10.0, 60.0, 25.0)
+            genero = st.selectbox("Género", ["Masculino", "Femenino"])
+            fumador = st.selectbox("¿Fumador?", ["Si", "No"])
+            
+        with c2:
+            ciudad = st.selectbox("Ciudad", ["Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena", "Bucaramanga", "Pereira", "Manizales", "Cúcuta", "Ibagué", "Otra"])
+            antecedente = st.selectbox("Antecedentes Familiares", ["Si", "No"])
+            siniestro = st.number_input("Valor Siniestro Histórico (COP)", min_value=0.0, value=0.0)
 
-if submit:
-    # 3. Recrear la lógica de ingeniería de variables de tu modelo
-    data = {
-        "Edad": edad,
-        "IMC": imc,
-        "Fumador": fumador,
-        "Ciudad": ciudad,
-        "Antecedente Familiar": antecedente,
-        "VALOR SINIESTRO PAGADO COL": siniestro,
-        "Género": genero,
-        "log_siniestro": np.log1p(siniestro),
-        "Edad_2": edad ** 2,
-        "Interaccion_Edad_IMC": edad * imc
-    }
-    
-    input_df = pd.DataFrame([data])
-    
-    # Asegurar que el orden de las columnas sea el mismo que en el entrenamiento
-    input_df = input_df[features_model]
-    
-    # 4. Predicción
-    prediccion = pipeline.predict(input_df)[0]
-    
-    st.success(f"### Valor de la Prima Sugerida: ${prediccion:,.2f} COP")
-    st.info("Este valor busca el equilibrio entre el beneficio técnico de la aseguradora y la competitividad para el cliente.")
+        enviar = st.form_submit_button("Generar Predicción")
+
+    if enviar:
+        # --- REPLICAR INGENIERÍA DE VARIABLES ---
+        data = {
+            "Edad": edad,
+            "IMC": imc,
+            "Fumador": fumador,
+            "Ciudad": ciudad,
+            "Antecedente Familiar": antecedente,
+            "VALOR SINIESTRO PAGADO COL": siniestro,
+            "Género": genero
+        }
+        
+        data["log_siniestro"] = np.log1p(siniestro)
+        data["Edad_2"] = edad ** 2
+        data["Interaccion_Edad_IMC"] = edad * imc
+        
+        input_df = pd.DataFrame([data])
+        
+        # Asegurar columnas
+        for col in features_model:
+            if col not in input_df.columns:
+                input_df[col] = 0
+        
+        input_df = input_df[features_model]
+        
+        # --- PREDICCIÓN Y RANGO ---
+        with st.spinner('Analizando perfil de riesgo...'):
+            try:
+                prediccion = pipeline.predict(input_df)[0]
+                
+                # Calcular rango basado en el MAE
+                valor_min = max(0, prediccion - MAE_VALOR)
+                valor_max = prediccion + MAE_VALOR
+                
+                # --- MOSTRAR RESULTADOS ---
+                st.divider()
+                st.subheader("Resultado de la Cotización")
+                
+                # Métrica principal
+                st.metric(label="Prima Sugerida (Base)", value=f"${prediccion:,.0f} COP")
+                
+                # Rango de oscilación
+                st.info(f"""
+                **Rango Estimado de Ajuste:** Debido a la variabilidad estadística, el valor puede oscilar entre:  
+                ### **${valor_min:,.0f}** y **${valor_max:,.0f} COP**
+                """)
+                
+                # Explicación técnica
+                with st.expander("Ver detalles del cálculo"):
+                    st.write(f"- **Predicción Central:** ${prediccion:,.2f}")
+                    st.write(f"- **Error Medio Aplicado (MAE):** ±${MAE_VALOR:,.2f}")
+                    st.write("- **Modelo:** XGBoost Regressor v3.2.0")
+                    st.write("- **Variables clave:** El IMC y el historial de siniestros tienen el mayor peso en este resultado.")
+                
+                st.balloons()
+                
+            except Exception as e:
+                st.error(f"Error durante la predicción: {e}")
+else:
+    st.warning("⚠️ El archivo del modelo no se encontró o es incompatible.")
+
+st.markdown("---")
+st.caption("Desarrollado para la optimización de beneficios Aseguradora-Cliente.")
