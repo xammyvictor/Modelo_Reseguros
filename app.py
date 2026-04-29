@@ -9,7 +9,8 @@ import os
 st.set_page_config(page_title="Seguros - Cotizador de Primas", layout="centered")
 
 # --- CONSTANTES ---
-MAE_VALOR = 71322.57
+# Actualizado según la nueva métrica del modelo
+MAE_VALOR = 70312.0
 MODEL_FILE = 'pipeline_modelo_primas.pkl'
 FEATURES_FILE = 'features_list.pkl'
 
@@ -42,7 +43,7 @@ if error_msg:
     st.warning(error_msg)
     st.info("""
     **Instrucciones para solucionar:**
-    1. Asegúrate de haber re-entrenado el modelo con las nuevas variables (**Patología, Alergias, Actividad Física**) y haber generado los nuevos archivos `.pkl`.
+    1. Asegúrate de haber re-entrenado el modelo con las nuevas opciones y haber generado los nuevos archivos `.pkl`.
     2. Verifica que los nombres de los archivos en GitHub sean exactos.
     """)
 else:
@@ -58,13 +59,16 @@ else:
             altura = st.number_input("Altura (cm)", min_value=100.0, max_value=250.0, value=170.0)
             genero = st.selectbox("Género", ["Masculino", "Femenino"])
             fumador = st.selectbox("¿Fumador?", ["No", "Si"])
-            actividad = st.selectbox("Actividad Física", ["Sedentario", "Moderado", "Activo"])
+            # Opciones actualizadas según solicitud
+            actividad = st.selectbox("Actividad Física", ["Activo", "Moderado", "Sedentario"])
             
         with c2:
             ciudad = st.selectbox("Ciudad", ["Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena", "Bucaramanga", "Pereira", "Manizales", "Cúcuta", "Ibagué", "Otra"])
             antecedente = st.selectbox("Antecedentes Familiares", ["No", "Si"])
-            patologia = st.selectbox("Patología", ["Ninguna", "Hipertensión", "Diabetes", "Asma", "Otra"])
-            alergias = st.selectbox("Alergias", ["Ninguna", "Medicamentos", "Alimentos", "Ambientales", "Otras"])
+            # Opciones de Patología actualizadas
+            patologia = st.selectbox("Patología", ["Asma", "Cardiopatía", "Diabetes", "Hipertensión", "Ninguna"])
+            # Opciones de Alergias actualizadas
+            alergias = st.selectbox("Alergias", ["Gluten", "Lácteos", "Medicamentos", "Ninguna", "Polen"])
             siniestro = st.number_input("Valor Siniestro Histórico (COP)", min_value=0.0, value=0.0)
 
         enviar = st.form_submit_button("Generar Predicción")
@@ -72,7 +76,6 @@ else:
     if enviar:
         try:
             # --- CÁLCULO DE IMC ---
-            # IMC = peso / altura(m)^2
             altura_m = altura / 100
             imc_calculado = peso / (altura_m ** 2)
             
@@ -97,7 +100,7 @@ else:
             
             input_df = pd.DataFrame([data])
             
-            # Asegurar columnas y orden según el nuevo modelo entrenado
+            # Asegurar columnas y orden según el modelo entrenado
             for col in features_model:
                 if col not in input_df.columns:
                     input_df[col] = 0
@@ -115,10 +118,9 @@ else:
                 
                 st.metric(label="Prima Sugerida (Valor Central)", value=f"${prediccion:,.0f} COP")
                 
-                # Mostrar el IMC calculado para transparencia del usuario
                 st.write(f"**IMC Calculado:** {imc_calculado:.2f}")
 
-                # Diseño del rango
+                # Diseño del rango optimizado (sin asteriscos)
                 st.markdown(f"""
                 <div style="
                     background-color: #f0f7ff; 
@@ -151,13 +153,13 @@ else:
                 with st.expander("Ver detalles técnicos"):
                     st.write(f"**Predicción Central:** ${prediccion:,.2f}")
                     st.write(f"**Margen de Error (MAE):** ±${MAE_VALOR:,.2f}")
-                    st.write(f"**Variables de Salud:** Patología ({patologia}), Alergias ({alergias}), Actividad ({actividad}).")
+                    st.write(f"**Perfil:** {patologia} | {alergias} | {actividad}")
                 
                 st.balloons()
                 
         except Exception as e:
             st.error(f"Error durante la predicción: {e}")
-            st.info("Asegúrate de que las nuevas variables coincidan exactamente con las usadas en el entrenamiento.")
+            st.info("Asegúrate de que las opciones seleccionadas coincidan con las categorías del modelo entrenado.")
 
 st.markdown("---")
 st.caption("Desarrollado para la optimización de beneficios Aseguradora-Cliente.")
