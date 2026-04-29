@@ -5,11 +5,10 @@ import joblib
 import xgboost as xgb
 import os
 
-# Configuración de página
-st.set_page_config(page_title="Seguros - Cotizador de Primas", layout="centered")
+# Configuración de página - Se cambia a 'wide' para acomodar mejor las 4 columnas
+st.set_page_config(page_title="Seguros - Cotizador de Primas", layout="wide")
 
 # --- CONSTANTES ---
-# Actualizado según la nueva métrica del modelo
 MAE_VALOR = 70312.0
 MODEL_FILE = 'pipeline_modelo_primas.pkl'
 FEATURES_FILE = 'features_list.pkl'
@@ -50,28 +49,44 @@ else:
     pipeline, features_model = model_data
     
     with st.form("form_cliente"):
-        st.subheader("Datos Demográficos y de Salud")
-        c1, c2 = st.columns(2)
+        st.subheader("Datos del Asegurado")
         
-        with c1:
+        # Fila 1: Variables demográficas y físicas base
+        row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+        with row1_col1:
             edad = st.number_input("Edad", 18, 100, 30)
+        with row1_col2:
             peso = st.number_input("Peso (kg)", min_value=30.0, max_value=200.0, value=70.0)
+        with row1_col3:
             altura = st.number_input("Altura (cm)", min_value=100.0, max_value=250.0, value=170.0)
+        with row1_col4:
             genero = st.selectbox("Género", ["Masculino", "Femenino"])
-            fumador = st.selectbox("¿Fumador?", ["No", "Si"])
-            # Opciones actualizadas según solicitud
-            actividad = st.selectbox("Actividad Física", ["Activo", "Moderado", "Sedentario"])
             
-        with c2:
+        # Fila 2: Estilo de vida y ubicación
+        row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+        with row2_col1:
+            fumador = st.selectbox("¿Fumador?", ["No", "Si"])
+        with row2_col2:
+            actividad = st.selectbox("Actividad Física", ["Activo", "Moderado", "Sedentario"])
+        with row2_col3:
             ciudad = st.selectbox("Ciudad", ["Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena", "Bucaramanga", "Pereira", "Manizales", "Cúcuta", "Ibagué", "Otra"])
+        with row2_col4:
             antecedente = st.selectbox("Antecedentes Familiares", ["No", "Si"])
-            # Opciones de Patología actualizadas
+            
+        # Fila 3: Salud específica e historial
+        row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
+        with row3_col1:
             patologia = st.selectbox("Patología", ["Asma", "Cardiopatía", "Diabetes", "Hipertensión", "Ninguna"])
-            # Opciones de Alergias actualizadas
+        with row3_col2:
             alergias = st.selectbox("Alergias", ["Gluten", "Lácteos", "Medicamentos", "Ninguna", "Polen"])
-            siniestro = st.number_input("Valor Siniestro Histórico (COP)", min_value=0.0, value=0.0)
+        with row3_col3:
+            siniestro = st.number_input("Siniestro Histórico (COP)", min_value=0.0, value=0.0)
+        with row3_col4:
+            # Espacio reservado para alineación o botón de ayuda futuro
+            st.write("") 
 
-        enviar = st.form_submit_button("Generar Predicción")
+        st.markdown("<br>", unsafe_allow_html=True)
+        enviar = st.form_submit_button("🚀 Generar Predicción de Prima")
 
     if enviar:
         try:
@@ -116,39 +131,40 @@ else:
                 st.divider()
                 st.subheader("Resultado de la Cotización")
                 
-                st.metric(label="Prima Sugerida (Valor Central)", value=f"${prediccion:,.0f} COP")
+                res_col1, res_col2 = st.columns([1, 2])
                 
-                st.write(f"**IMC Calculado:** {imc_calculado:.2f}")
+                with res_col1:
+                    st.metric(label="Prima Sugerida (Base)", value=f"${prediccion:,.0f} COP")
+                    st.write(f"**IMC Calculado:** {imc_calculado:.2f}")
 
-                # Diseño del rango optimizado (sin asteriscos)
-                st.markdown(f"""
-                <div style="
-                    background-color: #f0f7ff; 
-                    padding: 24px; 
-                    border-radius: 12px; 
-                    border-left: 6px solid #007bff; 
-                    margin-top: 20px;
-                    margin-bottom: 20px;
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-                ">
-                    <p style="margin: 0; color: #0056b3; font-weight: 600; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">
-                        Rango Estimado de Ajuste
-                    </p>
-                    <p style="margin: 8px 0; color: #444; font-size: 0.95rem;">
-                        Basado en el perfil de salud y riesgo, el valor oscila entre:
-                    </p>
-                    <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 5px;">
-                        <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
-                            ${valor_min:,.0f}
-                        </span>
-                        <span style="font-size: 1.2rem; color: #888; font-weight: 400;">y</span>
-                        <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
-                            ${valor_max:,.0f}
-                        </span>
-                        <span style="font-size: 1.1rem; font-weight: 600; color: #444; margin-left: 5px;">COP</span>
+                with res_col2:
+                    # Diseño del rango optimizado (sin asteriscos)
+                    st.markdown(f"""
+                    <div style="
+                        background-color: #f0f7ff; 
+                        padding: 24px; 
+                        border-radius: 12px; 
+                        border-left: 6px solid #007bff; 
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                    ">
+                        <p style="margin: 0; color: #0056b3; font-weight: 600; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            Rango Estimado de Ajuste
+                        </p>
+                        <p style="margin: 8px 0; color: #444; font-size: 0.95rem;">
+                            Basado en el perfil de salud y riesgo, el valor oscila entre:
+                        </p>
+                        <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 5px;">
+                            <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
+                                ${valor_min:,.0f}
+                            </span>
+                            <span style="font-size: 1.2rem; color: #888; font-weight: 400;">y</span>
+                            <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
+                                ${valor_max:,.0f}
+                            </span>
+                            <span style="font-size: 1.1rem; font-weight: 600; color: #444; margin-left: 5px;">COP</span>
+                        </div>
                     </div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
                 
                 with st.expander("Ver detalles técnicos"):
                     st.write(f"**Predicción Central:** ${prediccion:,.2f}")
