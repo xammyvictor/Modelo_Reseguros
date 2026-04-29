@@ -16,21 +16,18 @@ FEATURES_FILE = 'features_list.pkl'
 # --- CARGA DEL MODELO ---
 @st.cache_resource
 def load_model():
-    # 1. Verificar si los archivos existen en el directorio actual
     if not os.path.exists(MODEL_FILE):
         return None, f"Archivo no encontrado: {MODEL_FILE}"
     if not os.path.exists(FEATURES_FILE):
         return None, f"Archivo no encontrado: {FEATURES_FILE}"
     
     try:
-        # 2. Intentar cargar los archivos
         model = joblib.load(MODEL_FILE)
         features = joblib.load(FEATURES_FILE)
         return (model, features), None
     except Exception as e:
         return None, f"Error técnico al cargar: {str(e)}"
 
-# Intentar cargar
 model_data, error_msg = load_model()
 
 # --- INTERFAZ ---
@@ -45,50 +42,62 @@ if error_msg:
     st.warning(error_msg)
     st.info("""
     **Instrucciones para solucionar:**
-    1. Asegúrate de que los archivos `pipeline_modelo_primas.pkl` y `features_list.pkl` estén subidos a la raíz de tu repositorio en GitHub.
-    2. Verifica que los nombres coincidan exactamente (mayúsculas y minúsculas).
-    3. Si el error persiste, vuelve a generar los archivos en Google Colab con `joblib.dump` y súbelos de nuevo.
+    1. Asegúrate de haber re-entrenado el modelo con las nuevas variables (**Patología, Alergias, Actividad Física**) y haber generado los nuevos archivos `.pkl`.
+    2. Verifica que los nombres de los archivos en GitHub sean exactos.
     """)
 else:
     pipeline, features_model = model_data
     
     with st.form("form_cliente"):
-        st.subheader("Datos Demográficos y de Riesgo")
+        st.subheader("Datos Demográficos y de Salud")
         c1, c2 = st.columns(2)
         
         with c1:
             edad = st.number_input("Edad", 18, 100, 30)
-            imc = st.number_input("Índice de Masa Corporal (IMC)", 10.0, 60.0, 25.0)
+            peso = st.number_input("Peso (kg)", min_value=30.0, max_value=200.0, value=70.0)
+            altura = st.number_input("Altura (cm)", min_value=100.0, max_value=250.0, value=170.0)
             genero = st.selectbox("Género", ["Masculino", "Femenino"])
-            fumador = st.selectbox("¿Fumador?", ["Si", "No"])
+            fumador = st.selectbox("¿Fumador?", ["No", "Si"])
+            actividad = st.selectbox("Actividad Física", ["Sedentario", "Moderado", "Activo"])
             
         with c2:
             ciudad = st.selectbox("Ciudad", ["Bogotá", "Medellín", "Cali", "Barranquilla", "Cartagena", "Bucaramanga", "Pereira", "Manizales", "Cúcuta", "Ibagué", "Otra"])
-            antecedente = st.selectbox("Antecedentes Familiares", ["Si", "No"])
+            antecedente = st.selectbox("Antecedentes Familiares", ["No", "Si"])
+            patologia = st.selectbox("Patología", ["Ninguna", "Hipertensión", "Diabetes", "Asma", "Otra"])
+            alergias = st.selectbox("Alergias", ["Ninguna", "Medicamentos", "Alimentos", "Ambientales", "Otras"])
             siniestro = st.number_input("Valor Siniestro Histórico (COP)", min_value=0.0, value=0.0)
 
         enviar = st.form_submit_button("Generar Predicción")
 
     if enviar:
         try:
+            # --- CÁLCULO DE IMC ---
+            # IMC = peso / altura(m)^2
+            altura_m = altura / 100
+            imc_calculado = peso / (altura_m ** 2)
+            
             # --- INGENIERÍA DE VARIABLES ---
             data = {
                 "Edad": edad,
-                "IMC": imc,
+                "IMC": imc_calculado,
                 "Fumador": fumador,
                 "Ciudad": ciudad,
                 "Antecedente Familiar": antecedente,
                 "VALOR SINIESTRO PAGADO COL": siniestro,
-                "Género": genero
+                "Género": genero,
+                "Patología": patologia,
+                "Alergias": alergias,
+                "Actividad Física": actividad
             }
             
+            # Variables derivadas del entrenamiento
             data["log_siniestro"] = np.log1p(siniestro)
             data["Edad_2"] = edad ** 2
-            data["Interaccion_Edad_IMC"] = edad * imc
+            data["Interaccion_Edad_IMC"] = edad * imc_calculado
             
             input_df = pd.DataFrame([data])
             
-            # Asegurar columnas y orden
+            # Asegurar columnas y orden según el nuevo modelo entrenado
             for col in features_model:
                 if col not in input_df.columns:
                     input_df[col] = 0
@@ -104,10 +113,12 @@ else:
                 st.divider()
                 st.subheader("Resultado de la Cotización")
                 
-                # Métrica principal de Streamlit
                 st.metric(label="Prima Sugerida (Valor Central)", value=f"${prediccion:,.0f} COP")
                 
-                # --- DISEÑO MEJORADO DEL RANGO (Sin asteriscos) ---
+                # Mostrar el IMC calculado para transparencia del usuario
+                st.write(f"**IMC Calculado:** {imc_calculado:.2f}")
+
+                # Diseño del rango
                 st.markdown(f"""
                 <div style="
                     background-color: #f0f7ff; 
@@ -122,7 +133,7 @@ else:
                         Rango Estimado de Ajuste
                     </p>
                     <p style="margin: 8px 0; color: #444; font-size: 0.95rem;">
-                        Debido a la variabilidad estadística, el valor puede oscilar entre:
+                        Basado en el perfil de salud y riesgo, el valor oscila entre:
                     </p>
                     <div style="display: flex; align-items: baseline; gap: 10px; margin-top: 5px;">
                         <span style="font-size: 1.8rem; font-weight: 800; color: #222;">
@@ -137,15 +148,16 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                with st.expander("Ver detalles técnicos del modelo"):
+                with st.expander("Ver detalles técnicos"):
                     st.write(f"**Predicción Central:** ${prediccion:,.2f}")
                     st.write(f"**Margen de Error (MAE):** ±${MAE_VALOR:,.2f}")
-                    st.write("**Confiabilidad:** El modelo se ajusta al perfil demográfico máximo registrado para este grupo.")
+                    st.write(f"**Variables de Salud:** Patología ({patologia}), Alergias ({alergias}), Actividad ({actividad}).")
                 
                 st.balloons()
                 
         except Exception as e:
             st.error(f"Error durante la predicción: {e}")
+            st.info("Asegúrate de que las nuevas variables coincidan exactamente con las usadas en el entrenamiento.")
 
 st.markdown("---")
 st.caption("Desarrollado para la optimización de beneficios Aseguradora-Cliente.")
