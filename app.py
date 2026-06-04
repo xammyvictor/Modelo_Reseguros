@@ -113,18 +113,46 @@ else:
             data["Edad_2"] = edad ** 2
             data["Interaccion_Edad_IMC"] = edad * imc_calculado
             
+            # --- PREPARACIÓN DE DATOS (INPUT REAL) ---
             input_df = pd.DataFrame([data])
-            
-            # Asegurar columnas y orden según el modelo entrenado
             for col in features_model:
                 if col not in input_df.columns:
                     input_df[col] = 0
-            
             input_df = input_df[features_model]
             
-            # --- PREDICCIÓN ---
+            # --- PREDICCIÓN CON CORRECCIÓN DE NEGATIVIDAD ---
             with st.spinner('Analizando perfil de riesgo...'):
-                prediccion = pipeline.predict(input_df)[0]
+                
+                # 1. Calcular la predicción base del modelo como si NO hubiera siniestro
+                data_base = data.copy()
+                data_base["VALOR SINIESTRO PAGADO COL"] = 0.0
+                data_base["log_siniestro"] = 0.0
+                
+                input_df_base = pd.DataFrame([data_base])
+                for col in features_model:
+                    if col not in input_df_base.columns:
+                        input_df_base[col] = 0
+                input_df_base = input_df_base[features_model]
+                
+                prediccion_base = pipeline.predict(input_df_base)[0]
+                
+                # 2. Calcular la predicción directa del modelo con los datos actuales
+                prediccion_modelo = pipeline.predict(input_df)[0]
+                
+                # 3. Aplicar regla lógica de incremento garantizado si existe siniestro
+                if siniestro > 0:
+                    # Recargo fijo de siniestralidad (15% sobre la prima base)
+                    recargo_riesgo_fijo = prediccion_base * 0.15
+                    # Recargo variable proporcional (2% del total reclamado históricamente)
+                    recargo_monto_variable = siniestro * 0.02
+                    
+                    # Garantizamos que la prima final sea mayor a la base agregando los recargos técnicos
+                    prediccion = max(prediccion_modelo, prediccion_base) + recargo_riesgo_fijo + recargo_monto_variable
+                else:
+                    # Si no hay siniestro histórico, se usa el valor base calculado de forma estándar
+                    prediccion = prediccion_base
+                
+                # Rango de ajuste basado en el MAE del modelo
                 valor_min = max(0, prediccion - MAE_VALOR)
                 valor_max = prediccion + MAE_VALOR
                 
@@ -170,6 +198,8 @@ else:
                     st.write(f"**Predicción Central:** ${prediccion:,.2f}")
                     st.write(f"**Margen de Error (MAE):** ±${MAE_VALOR:,.2f}")
                     st.write(f"**Perfil:** {patologia} | {alergias} | {actividad}")
+                    if siniestro > 0:
+                        st.info(f"Se ha aplicado un ajuste por recargo técnico de siniestralidad activa.")
                 
                 st.balloons()
                 
